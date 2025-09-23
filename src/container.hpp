@@ -19,17 +19,20 @@ class container {
 
   explicit container(std::span<const element_type> data);
 
-  // TODO You may also add additional functions (or data members).
+  element_type& operator[](std::size_t idx);
+
+  std::size_t size() const;
 
  private:
   // TODO define your data layout
   // Your datastructure should consist of multiple blocks of data, which don't
   // necessarily have to be vectors.
-  std::vector<std::vector<element_type>> placeholder_;
+  std::vector<element_type> placeholder_;
+  std::size_t size_;
 
  public:
   [[nodiscard]] auto to_view() const {
-    return std::views::join(placeholder_);
+    return std::views::all(placeholder_);
   }
 };
 

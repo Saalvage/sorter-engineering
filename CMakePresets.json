@@ -8,12 +8,24 @@
 			"cacheVariables": {
 				"CMAKE_BUILD_TYPE": "Release"
 			}
+		},
+		{
+			"name": "debug",
+			"binaryDir": "${sourceDir}/build",
+			"generator": "Unix Makefiles",
+			"cacheVariables": {
+				"CMAKE_BUILD_TYPE": "Debug"
+			}
 		}
 	],
 	"buildPresets": [
 		{
 			"name": "release",
 			"configurePreset": "release"
+		},
+		{
+			"name": "debug",
+			"configurePreset": "debug"
 		}
 	]
 }
