@@ -1,0 +1,19 @@
+{
+	"version": 2,
+	"configurePresets": [
+		{
+			"name": "release",
+			"binaryDir": "${sourceDir}/build",
+			"generator": "Unix Makefiles",
+			"cacheVariables": {
+				"CMAKE_BUILD_TYPE": "Release"
+			}
+		}
+	],
+	"buildPresets": [
+		{
+			"name": "release",
+			"configurePreset": "release"
+		}
+	]
+}
