@@ -50,11 +50,11 @@ void runExperiment(std::string_view name,
   }();
 
   int iterations = 0;
-  long totalNanoseconds = 0;
-  long totalNanosecondsFactory = 0;
+  std::uint64_t totalNanoseconds = 0;
+  std::uint64_t totalNanosecondsFactory = 0;
   int maxIterations = 10'000;
 
-  while (totalNanoseconds < 1000 * 1000) {
+  while (totalNanoseconds < 1000ull * 1000 * 1000 * 20) {
     if (iterations >= maxIterations) {
       break;
     }
