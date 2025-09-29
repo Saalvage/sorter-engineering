@@ -6,8 +6,8 @@
 
 namespace ae {
 
-static constexpr int ROBIN_HOOD_RANGE = 1000;
-static constexpr int ROBIN_HOOD_SPACE_MULT = 4;
+static constexpr int ROBIN_HOOD_RANGE = 1000000;
+static constexpr float ROBIN_HOOD_SPACE_MULT = 2.5f;
 
 thread_local std::vector<container::element_type> sorter::present(ROBIN_HOOD_SPACE_MULT * ROBIN_HOOD_RANGE);
 
@@ -17,7 +17,7 @@ void sorter::sort(container& data, int num_threads) {
 
 // Inspired by https://en.wikipedia.org/wiki/Radix_sort
 void sorter::do_radix(container& data, int radix, std::size_t start_index, std::size_t end_index) {
-    if (ROBIN_HOOD_RANGE > 0 && end_index - start_index + 1 <= ROBIN_HOOD_RANGE) {
+    if (ROBIN_HOOD_RANGE > 0 && end_index - start_index + 1 <= ROBIN_HOOD_RANGE && radix < 63) {
         do_robin_hood(data, start_index, end_index);
         return;
     }
