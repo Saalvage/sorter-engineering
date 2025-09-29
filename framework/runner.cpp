@@ -62,7 +62,7 @@ void runExperiment(std::string_view name,
     std::chrono::steady_clock::time_point ctor = std::chrono::steady_clock::now();
     auto to_sort = container_factory(input);
     std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
-    sort_func(to_sort);
+    sort_func(to_sort, num_threads);
     std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
     totalNanoseconds +=
         std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin)
@@ -95,8 +95,8 @@ int main(int argc, char **argv) {
                 [](const auto& data) {
                   return ae::container(data);
                 },
-                [](ae::container& data) {
-                  ae::sorter{}.sort(data);
+                [](ae::container& data, int num_threads) {
+                  ae::sorter{}.sort(data, num_threads);
                 }, argc, argv);
 
   return 0;
