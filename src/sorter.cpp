@@ -1,6 +1,7 @@
 #include "sorter.hpp"
 
 #include <algorithm>
+#include <thread>
 
 #define AE_ROBIN_HOOD_LIMIT_AUX_SPACE false
 
@@ -12,7 +13,43 @@ static constexpr float ROBIN_HOOD_SPACE_MULT = 2.5f;
 thread_local std::vector<container::element_type> sorter::present(ROBIN_HOOD_SPACE_MULT * ROBIN_HOOD_RANGE);
 
 void sorter::sort(container& data, int num_threads) {
-    do_radix(data, 63, 0, data.size() - 1);
+    is_sorting = true;
+    waiting_count = 0;
+
+    std::vector<std::jthread> threads(num_threads);
+    for (int i = 0; i < num_threads; i++) {
+        threads[i] = std::jthread([&, i] {
+            if (i == 0) {
+                do_radix(data, 63, 0, data.size() - 1);
+            }
+
+            while (true) {
+                std::unique_lock lock{ jobs_mutex };
+                if (jobs.empty()) {
+                    if (++waiting_count == num_threads) {
+                        is_sorting = false;
+                        jobs_cv.notify_all();
+                        break;
+                    }
+                    jobs_cv.wait(lock, [&] { return !is_sorting || !jobs.empty(); });
+                    --waiting_count;
+                }
+
+                if (!is_sorting) {
+                    break;
+                }
+
+                auto my_job = jobs.top();
+                jobs.pop();
+                lock.unlock();
+                do_radix(data, my_job.radix, my_job.start_index, my_job.end_index);
+            }
+        });
+    }
+
+    for (int i = 0; i < num_threads; i++) {
+        threads[i].join();
+    }
 }
 
 // Inspired by https://en.wikipedia.org/wiki/Radix_sort
@@ -35,12 +72,22 @@ void sorter::do_radix(container& data, int radix, std::size_t start_index, std::
     }
 
     if (ROBIN_HOOD_RANGE <= 0 || radix != 0) {
+        radix--;
         auto new_end = data[start_i] & mask ? start_i - 1 : start_i;
-        if (start_i != 0 && start_index < new_end) {
-            do_radix(data, radix - 1, start_index, new_end);
-        }
+        bool has_cont = start_i != 0 && start_index < new_end;
         if (new_end + 1 < end_index) {
-            do_radix(data, radix - 1, new_end + 1, end_index);
+            if (has_cont) {
+                {
+                    std::lock_guard lock{ jobs_mutex };
+                    jobs.emplace(radix, new_end + 1, end_index);
+                }
+                jobs_cv.notify_one();
+                do_radix(data, radix, start_index, new_end);
+            } else {
+                do_radix(data, radix, new_end + 1, end_index);
+            }
+        } else if (has_cont) {
+            do_radix(data, radix, start_index, new_end);
         }
     }
 }
@@ -51,7 +98,7 @@ void sorter::do_robin_hood(container& data, std::size_t start_index, std::size_t
 #if AE_ROBIN_HOOD_LIMIT_AUX_SPACE
         (end_index - start_index + 1) * ROBIN_HOOD_SPACE_MULT;
 #else
-		present.size();
+        present.size();
 #endif
     auto min = data[start_index];
     auto max = min;
