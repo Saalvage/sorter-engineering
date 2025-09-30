@@ -22,11 +22,13 @@ class container {
   std::size_t size() const;
 
  private:
-  std::vector<element_type> placeholder_;
+  std::size_t elements_per_block;
+  std::vector<std::vector<element_type>> blocks;
+  std::size_t total_size;
 
  public:
   [[nodiscard]] auto to_view() const {
-    return std::views::all(placeholder_);
+    return std::views::join(blocks);
   }
 };
 
