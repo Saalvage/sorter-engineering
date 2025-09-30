@@ -3,11 +3,11 @@
 import matplotlib.pyplot as plt
 import subprocess
 import argparse
+import os
 from pathlib import Path
 
 def run_experiment(output_file, build_dir):
-    # The number of threads is not currently used, it's just here in case you want to parallelize your code.
-    for threads in [1]:
+    for threads in [2**i for i in range(0, os.cpu_count().bit_length())]:
         for size in [1e2, 1e3, 1e4 + 1, 1e5, 1e6 - 1, 1e7]:
             print("Measuring p=" + str(threads) + " n=" + str(size))
             executable = Path(build_dir) / "Sorter"
@@ -42,12 +42,14 @@ def make_plot(result_file):
             plots[t][name + " (constructor)"].append((n, constructorNanoseconds / n))
             maxDuration = max(maxDuration, max(durationNanoseconds, constructorNanoseconds))
 
-    fig, axs = plt.subplots(len(plots))
+    fig, axs = plt.subplots(len(plots), sharex=True, sharey=True, figsize=(10,10))
 
     for i, t in enumerate(plots):
         if len(plots) > 1:
             axs[i].set_title(f"#p={t}")
             for name in plots[t]:
+                if name.endswith(" (constructor)"):
+                    continue
                 axs[i].plot(*zip(*plots[t][name]), label=name, marker='x')
                 axs[i].plot(*zip(*plots[t][name + " (constructor)"]), label=name + " (constructor)", marker='+')
                 axs[i].set_xscale('log')
