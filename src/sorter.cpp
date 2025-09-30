@@ -3,12 +3,11 @@
 #include <algorithm>
 #include <thread>
 
-#define AE_ROBIN_HOOD_LIMIT_AUX_SPACE false
-
 namespace ae {
 
-static constexpr int ROBIN_HOOD_RANGE = 1000000;
-static constexpr float ROBIN_HOOD_SPACE_MULT = 2.5f;
+static constexpr bool ROBIN_HOOD_LIMIT_AUX_SPACE = true;
+static constexpr int ROBIN_HOOD_RANGE = 1'000'000;
+static constexpr float ROBIN_HOOD_SPACE_MULT = 2.f;
 
 thread_local std::vector<container::element_type> sorter::present(ROBIN_HOOD_SPACE_MULT * ROBIN_HOOD_RANGE);
 
@@ -94,12 +93,12 @@ void sorter::do_radix(container& data, int radix, std::size_t start_index, std::
 
 // Inspired by https://github.com/mlochbaum/rhsort
 void sorter::do_robin_hood(container& data, std::size_t start_index, std::size_t end_index) {
-    std::size_t slots =
-#if AE_ROBIN_HOOD_LIMIT_AUX_SPACE
-        (end_index - start_index + 1) * ROBIN_HOOD_SPACE_MULT;
-#else
-        present.size();
-#endif
+    std::size_t slots;
+    if constexpr (ROBIN_HOOD_LIMIT_AUX_SPACE) {
+        slots = (end_index - start_index + 1) * ROBIN_HOOD_SPACE_MULT;
+    } else {
+        slots = present.size();
+    }
     auto min = data[start_index];
     auto max = min;
 
