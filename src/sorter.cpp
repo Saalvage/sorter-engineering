@@ -5,18 +5,14 @@
 
 namespace ae {
 
-static constexpr bool ROBIN_HOOD_LIMIT_AUX_SPACE = true;
-static constexpr int ROBIN_HOOD_RANGE = 1'000'000;
-static constexpr float ROBIN_HOOD_SPACE_MULT = 2.f;
+thread_local std::vector<container::element_type> sorter::robin_hood_auxiliary(ROBIN_HOOD_SPACE_MULT * ROBIN_HOOD_RANGE);
 
-thread_local std::vector<container::element_type> sorter::present(ROBIN_HOOD_SPACE_MULT * ROBIN_HOOD_RANGE);
-
-void sorter::sort(container& data, int num_threads) {
+void sorter::sort(container& data, std::size_t num_threads) {
     is_sorting = true;
     waiting_count = 0;
 
     std::vector<std::jthread> threads(num_threads);
-    for (int i = 0; i < num_threads; i++) {
+    for (std::size_t i = 0; i < num_threads; i++) {
         threads[i] = std::jthread([&, i] {
             if (i == 0) {
                 do_radix(data, 63, 0, data.size() - 1);
@@ -46,7 +42,7 @@ void sorter::sort(container& data, int num_threads) {
         });
     }
 
-    for (int i = 0; i < num_threads; i++) {
+    for (std::size_t i = 0; i < num_threads; i++) {
         threads[i].join();
     }
 }
@@ -64,7 +60,8 @@ void sorter::do_radix(container& data, int radix, std::size_t start_index, std::
     auto mask = 1ull << radix;
     while (start_i < end_i) {
         if (data[start_i] & mask) {
-            std::swap(data[start_i], data[end_i--]);
+            std::swap(data[start_i], data[end_i]);
+            end_i--;
         } else {
             start_i++;
         }
@@ -97,7 +94,7 @@ void sorter::do_robin_hood(container& data, std::size_t start_index, std::size_t
     if constexpr (ROBIN_HOOD_LIMIT_AUX_SPACE) {
         slots = (end_index - start_index + 1) * ROBIN_HOOD_SPACE_MULT;
     } else {
-        slots = present.size();
+        slots = robin_hood_auxiliary.size();
     }
     auto min = data[start_index];
     auto max = min;
@@ -110,76 +107,78 @@ void sorter::do_robin_hood(container& data, std::size_t start_index, std::size_t
     // Widening range to always produce indices in [0, n) instead of [0, n].
     double range = max - min + 1;
 
+    constexpr std::uint64_t msb = 1ull << 63;
+
     // To allow for differentiating between 0 as a value and an empty slot,
     // we set the most significant bit for all values in our robin hood array to 1.
     // We mask it out again when transferring the values back into the original array.
     // Note: Assuming at least one iteration of radix sort was executed,
     // we know that the msb will be consistent across the entire range.
-    std::uint64_t msb_mask = (min & (1ull << 63)) ? ~0ull : ~(1ull << 63);
+    std::uint64_t msb_mask = (min & msb) ? ~0ull : ~msb;
 
     for (std::size_t i = start_index; i <= end_index; i++) {
         auto new_val = data[i];
         auto idx = std::min<std::size_t>((new_val - min) / range * slots, slots - 1);
-        std::uint64_t val = present[idx];
-        new_val |= 1ull << 63;
-        if (val) {
-            if (val > new_val && idx > 0) {
+        auto curr_val = robin_hood_auxiliary[idx];
+        new_val |= msb;
+        if (curr_val) {
+            if (curr_val > new_val && idx > 0) {
                 idx--;
-                while (idx > 0 && (val = present[idx]) && val > new_val) {
+                while (idx > 0 && (curr_val = robin_hood_auxiliary[idx]) && curr_val > new_val) {
                     idx--;
                 }
-            } else if (val < new_val && idx < slots - 1) {
+            } else if (curr_val < new_val && idx < slots - 1) {
                 idx++;
-                while (idx < slots - 1 && (val = present[idx]) && val < new_val) {
+                while (idx < slots - 1 && (curr_val = robin_hood_auxiliary[idx]) && curr_val < new_val) {
                     idx++;
                 }
             }
         }
-        val = present[idx];
-        if (val) {
+        curr_val = robin_hood_auxiliary[idx];
+        if (curr_val) {
             // Either we encountered larger/equal values or we reached the end, either way we need to shift.
 
             // We need to either shift the larger values right (if they exist) or the smaller values left.
             // We shift into the direction with more space to avoid a situation where we cannot shift further.
-            std::uint64_t next_val;
+            container::element_type shift_val;
             auto shift_idx = idx;
             if (idx > slots / 2) {
                 // Shift left.
-                if (val > new_val) {
+                if (curr_val > new_val) {
                     idx--;
-                    val = present[idx];
+                    curr_val = robin_hood_auxiliary[idx];
                     shift_idx = idx;
                 }
                 do {
-                    next_val = present[shift_idx - 1];
-                    present[shift_idx - 1] = val;
-                    val = next_val;
+                    shift_val = robin_hood_auxiliary[shift_idx - 1];
+                    robin_hood_auxiliary[shift_idx - 1] = curr_val;
+                    curr_val = shift_val;
                     shift_idx--;
-                } while (next_val);
+                } while (shift_val);
             } else {
                 // Shift right.
-                if (val < new_val) {
+                if (curr_val < new_val) {
                     idx++;
-                    val = present[idx];
+                    curr_val = robin_hood_auxiliary[idx];
                     shift_idx = idx;
                 }
                 do {
-                    next_val = present[shift_idx + 1];
-                    present[shift_idx + 1] = val;
-                    val = next_val;
+                    shift_val = robin_hood_auxiliary[shift_idx + 1];
+                    robin_hood_auxiliary[shift_idx + 1] = curr_val;
+                    curr_val = shift_val;
                     shift_idx++;
-                } while (next_val);
+                } while (shift_val);
             }
         }
 
-        present[idx] = new_val;
+        robin_hood_auxiliary[idx] = new_val;
     }
 
     auto data_idx = start_index;
     for (std::size_t i = 0; i < slots; i++) {
-        if (present[i]) {
-            data[data_idx++] = present[i] & msb_mask;
-            present[i] = 0;
+        if (robin_hood_auxiliary[i]) {
+            data[data_idx++] = robin_hood_auxiliary[i] & msb_mask;
+            robin_hood_auxiliary[i] = 0;
         }
     }
 }

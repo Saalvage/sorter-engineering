@@ -4,8 +4,6 @@
 
 namespace ae {
 
-static constexpr std::size_t NUM_BLOCKS = 1;
-
 container::container(std::span<const element_type> data)
 	: elements_per_block((data.size() + NUM_BLOCKS - 1) / NUM_BLOCKS), total_size(data.size()) {
     for (auto first = data.begin(); first < data.end();) {

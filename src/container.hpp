@@ -17,11 +17,13 @@ class container {
 
   explicit container(std::span<const element_type> data);
 
-  element_type& operator[](std::size_t idx);
+  [[nodiscard]] element_type& operator[](std::size_t idx);
 
-  std::size_t size() const;
+  [[nodiscard]] std::size_t size() const;
 
  private:
+  static constexpr std::size_t NUM_BLOCKS = 1;
+
   std::size_t elements_per_block;
   std::vector<std::vector<element_type>> blocks;
   std::size_t total_size;
