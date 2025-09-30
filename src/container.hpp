@@ -10,24 +10,26 @@ namespace ae {
 class sorter;
 
 class container {
-  friend class sorter;
+    friend class sorter;
 
- public:
-  using element_type = std::uint64_t;
+public:
+    using element_type = std::uint64_t;
 
-  explicit container(std::span<const element_type> data);
+    explicit container(std::span<const element_type> data, std::size_t num_threads);
 
-  element_type& operator[](std::size_t idx);
+private:
+    std::vector<std::vector<element_type>> segments;
 
-  std::size_t size() const;
+public:
+    [[nodiscard]] std::span<element_type> segment(int idx);
 
- private:
-  std::vector<element_type> placeholder_;
+    [[nodiscard]] auto to_view(int start, int end) {
+        return std::views::join(std::ranges::subrange(segments.begin() + start, segments.begin() + end));
+    }
 
- public:
-  [[nodiscard]] auto to_view() const {
-    return std::views::all(placeholder_);
-  }
+    [[nodiscard]] auto to_view() const {
+        return std::views::join(segments);
+    }
 };
 
 }  // namespace ae

@@ -4,18 +4,19 @@
 
 namespace ae {
 
-container::container(std::span<const element_type> data) {
-  for (auto first = data.begin(); first < data.end(); ++first) {
-      placeholder_.emplace_back(*first);
-  }
+container::container(std::span<const element_type> data, std::size_t num_threads) {
+    std::size_t num_blocks = num_threads;
+    const std::ptrdiff_t elements_per_block = (data.size() + num_blocks - 1) / num_blocks;
+
+    for (auto first = data.begin(); first < data.end();) {
+        const auto last = (data.end() - first) < elements_per_block ? data.end() : first + elements_per_block;
+        segments.emplace_back(first, last);
+        first = last;
+    }
 }
 
-std::size_t container::size() const {
-    return placeholder_.size();
-}
-
-container::element_type& container::operator[](std::size_t idx) {
-	return placeholder_[idx];
+std::span<container::element_type> container::segment(int idx) {
+    return segments[idx];
 }
 
 

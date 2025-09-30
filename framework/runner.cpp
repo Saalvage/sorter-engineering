@@ -60,7 +60,7 @@ void runExperiment(std::string_view name,
     }
 
     std::chrono::steady_clock::time_point ctor = std::chrono::steady_clock::now();
-    auto to_sort = container_factory(input);
+    auto to_sort = container_factory(input, num_threads);
     std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
     sort_func(to_sort, num_threads);
     std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
@@ -92,10 +92,10 @@ void runExperiment(std::string_view name,
 
 int main(int argc, char **argv) {
   runExperiment("sort",
-                [](const auto& data) {
-                  return ae::container(data);
+                [](const auto& data, std::size_t num_threads) {
+                  return ae::container(data, num_threads);
                 },
-                [](ae::container& data, int num_threads) {
+                [](ae::container& data, std::size_t num_threads) {
                   ae::sorter{}.sort(data, num_threads);
                 }, argc, argv);
 

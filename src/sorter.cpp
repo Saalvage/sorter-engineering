@@ -1,58 +1,62 @@
 #include "sorter.hpp"
 
 #include <algorithm>
-
-#define AE_ROBIN_HOOD_LIMIT_AUX_SPACE false
+#include <thread>
 
 namespace ae {
 
-static constexpr int ROBIN_HOOD_RANGE = 1000000;
-static constexpr float ROBIN_HOOD_SPACE_MULT = 2.5f;
-
 thread_local std::vector<container::element_type> sorter::present(ROBIN_HOOD_SPACE_MULT * ROBIN_HOOD_RANGE);
 
-void sorter::sort(container& data, int num_threads) {
-    do_radix(data, 63, 0, data.size() - 1);
+template <std::ranges::forward_range R>
+static void merge(R&& left, R&& right) {
+    auto it_left = std::ranges::begin(left);
+    auto it_right = std::ranges::begin(right);
+    auto end_left = std::ranges::end(left);
+    auto end_right = std::ranges::end(right);
+
+    while (it_left != end_left) {
+        if (*it_left > *it_right) {
+            auto val = *it_left;
+            *it_left = *it_right;
+            auto new_it_right = it_right;
+            decltype(it_right) prev;
+            do {
+                prev = new_it_right;
+                ++new_it_right;
+                *prev = *new_it_right;
+            } while (*new_it_right < val && new_it_right != end_right);
+            *prev = val;
+        }
+        ++it_left;
+    }
 }
 
-// Inspired by https://en.wikipedia.org/wiki/Radix_sort
-void sorter::do_radix(container& data, int radix, std::size_t start_index, std::size_t end_index) {
-    if (ROBIN_HOOD_RANGE > 0 && end_index - start_index + 1 <= ROBIN_HOOD_RANGE && radix < 63) {
-        do_robin_hood(data, start_index, end_index);
-        return;
+void sorter::sort(container& data, std::size_t num_threads) {
+    std::vector<std::jthread> threads(num_threads);
+
+    for (std::size_t thread_idx = 0; thread_idx < num_threads; thread_idx++) {
+        threads[thread_idx] = std::jthread([&, thread_idx] {
+            auto span = data.segment(thread_idx);
+            do_radix<63>(span, 0, span.size() - 1);
+
+            for (std::size_t i = 2; thread_idx % i == 0 && thread_idx + i / 2 < num_threads; i *= 2) {
+                threads[thread_idx + i / 2].join();
+                merge(data.to_view(thread_idx, thread_idx + i / 2), data.to_view(thread_idx + i / 2, thread_idx + i));
+            }
+        });
     }
 
-    auto start_i = start_index;
-    auto end_i = end_index;
-
-    auto mask = 1ull << radix;
-    while (start_i < end_i) {
-        if (data[start_i] & mask) {
-            std::swap(data[start_i], data[end_i--]);
-        } else {
-            start_i++;
-        }
-    }
-
-    if (ROBIN_HOOD_RANGE <= 0 || radix != 0) {
-        auto new_end = data[start_i] & mask ? start_i - 1 : start_i;
-        if (start_i != 0 && start_index < new_end) {
-            do_radix(data, radix - 1, start_index, new_end);
-        }
-        if (new_end + 1 < end_index) {
-            do_radix(data, radix - 1, new_end + 1, end_index);
-        }
-    }
+    threads[0].join();
 }
 
 // Inspired by https://github.com/mlochbaum/rhsort
-void sorter::do_robin_hood(container& data, std::size_t start_index, std::size_t end_index) {
-    std::size_t slots =
-#if AE_ROBIN_HOOD_LIMIT_AUX_SPACE
-        (end_index - start_index + 1) * ROBIN_HOOD_SPACE_MULT;
-#else
-		present.size();
-#endif
+void sorter::do_robin_hood(std::span<container::element_type>& data, std::size_t start_index, std::size_t end_index) {
+    std::size_t slots;
+    if constexpr (ROBIN_HOOD_LIMIT_AUX_SPACE) {
+        slots = (end_index - start_index + 1) * ROBIN_HOOD_SPACE_MULT;
+    } else {
+        slots = present.size();
+    }
     auto min = data[start_index];
     auto max = min;
 
